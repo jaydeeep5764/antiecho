@@ -12,9 +12,16 @@ import urllib.error
 # Import our AntiEcho library
 import antiecho
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-# Default to popular free models on OpenRouter
-DEFAULT_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
+
+# Reliable fallback free models on OpenRouter
+FALLBACK_FREE_MODELS = [
+    "qwen/qwen3.8-27b:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "nvidia/nemotron-3.5-lightning:free",
+    "liquid/lfm-2.5-2.6b:free",
+]
 
 
 def get_api_key():
@@ -22,11 +29,27 @@ def get_api_key():
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
         print("\n" + "=" * 60)
-        print("🔑 OPENROUTER API KEY NEEDED")
+        print("🔑 OPENROUTER API KEY")
         print("=" * 60)
-        print("Get your free key from: https://openrouter.ai/keys")
         key = input("Enter your OpenRouter API Key (sk-or-v1-...): ").strip()
     return key
+
+
+def get_active_free_models():
+    """Fetches currently active :free models from OpenRouter API."""
+    try:
+        req = urllib.request.Request(
+            OPENROUTER_MODELS_URL,
+            headers={"User-Agent": "AntiEcho-Tester"}
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            free = [m["id"] for m in data.get("data", []) if ":free" in m.get("id", "")]
+            if free:
+                return free
+    except Exception:
+        pass
+    return FALLBACK_FREE_MODELS
 
 
 def call_openrouter(api_key: str, model: str, messages: list):
@@ -44,20 +67,24 @@ def call_openrouter(api_key: str, model: str, messages: list):
     }
 
     req = urllib.request.Request(
-        OPENROUTER_URL,
+        OPENROUTER_CHAT_URL,
         data=json.dumps(payload).encode("utf-8"),
         headers=headers,
         method="POST"
     )
 
     try:
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=45) as response:
             res_data = json.loads(response.read().decode("utf-8"))
             return res_data["choices"][0]["message"]["content"]
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8")
-        print(f"\n❌ OpenRouter API Error ({e.code}):\n{error_body}")
-        sys.exit(1)
+        try:
+            err_json = json.loads(error_body)
+            msg = err_json.get("error", {}).get("message", error_body)
+        except Exception:
+            msg = error_body
+        raise RuntimeError(f"OpenRouter Error ({e.code}): {msg}")
 
 
 def main():
@@ -70,8 +97,21 @@ def main():
         print("❌ No API key provided. Exiting.")
         return
 
-    model = os.environ.get("OPENROUTER_MODEL", DEFAULT_MODEL)
-    print(f"\n🤖 Target Model: {model}")
+    # Fetch currently active free models
+    free_models = get_active_free_models()
+    default_model = free_models[0] if free_models else FALLBACK_FREE_MODELS[0]
+
+    print("\nAvailable Active Free Models:")
+    for idx, m in enumerate(free_models[:5], 1):
+        print(f"  [{idx}] {m}")
+
+    choice = input(f"\nSelect a model [1-{min(5, len(free_models))}] (Press Enter for default: {default_model}): ").strip()
+    if choice.isdigit() and 1 <= int(choice) <= min(5, len(free_models)):
+        selected_model = free_models[int(choice) - 1]
+    else:
+        selected_model = default_model
+
+    print(f"\n🤖 Using Model: {selected_model}")
 
     # Simulated messy multi-turn conversation that usually poisons model context
     conversation = [
@@ -136,13 +176,20 @@ def main():
         print(f"[{msg['role'].upper()}]: {msg['content'][:120]}...")
 
     # 2. Send the sanitized conversation to the real OpenRouter model
-    print(f"\n--- [3] SENDING CLEANED PAYLOAD TO OPENROUTER ({model}) ---")
+    print(f"\n--- [3] SENDING CLEANED PAYLOAD TO LIVE MODEL ({selected_model}) ---")
     print("⏳ Waiting for live response from model...")
 
-    response = call_openrouter(api_key, model, clean_conversation)
+    try:
+        response = call_openrouter(api_key, selected_model, clean_conversation)
+    except RuntimeError as e:
+        print(f"\n⚠️ {e}")
+        # Auto-try next free model
+        alternative = "google/gemma-4-26b-a4b-it:free" if selected_model != "google/gemma-4-26b-a4b-it:free" else "nvidia/nemotron-3.5-lightning:free"
+        print(f"🔄 Retrying with alternative free model: {alternative}...")
+        response = call_openrouter(api_key, alternative, clean_conversation)
 
     print("\n" + "=" * 65)
-    print("🎯 LIVE MODEL RESPONSE:")
+    print("🎯 LIVE MODEL RESPONSE FROM OPENROUTER:")
     print("=" * 65)
     print(response)
     print("=" * 65)
