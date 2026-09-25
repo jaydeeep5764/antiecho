@@ -199,5 +199,12 @@ def inspect(file: Optional[str]):
     ))
 
 
+@main.command()
+def chat():
+    """Launch interactive real-time live chat with dynamic context inspection."""
+    from chat import main as chat_main
+    chat_main()
+
+
 if __name__ == "__main__":
     main()
