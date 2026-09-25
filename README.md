@@ -115,32 +115,39 @@ response = client.chat.completions.create(
 
 ---
 
-## 🖥️ Live Terminal Inspection CLI
+## 🖥️ Live Terminal Inspection & Interactive Chat
 
-AntiEcho comes with an interactive terminal inspector to visualize savings on your conversation transcripts:
+AntiEcho includes a real-time interactive terminal chat that connects directly to live models (via OpenRouter or OpenAI) and dynamically inspects context on **every single turn**:
 
+### 1. Interactive Live Chat (Real Models + Dynamic Inspection)
 ```bash
-# Run the built-in live simulation demo:
+# Chat with live models in real time and watch AntiEcho sanitize context on the fly:
+python chat.py
+
+# Or via the CLI tool:
+python -m antiecho.cli chat
+```
+
+**What it looks like in your terminal:**
+```
+╭───────────────────────┬────────────┬─────────────────────┬─────────────╮
+│ Live Metric           │ Before     │ After (AntiEcho)    │ Turn Impact │
+├───────────────────────┼────────────┼─────────────────────┼─────────────┤
+│ Estimated Tokens      │ 1,199      │ 1,185               │ -14 (1.2%)  │
+│ Characters            │ 4,776      │ 4,719               │ -57 chars   │
+│ Echoes & Boilerplate  │ None       │ Stripped cleanly    │ 0 removed   │
+│ Resolved Error Traces │ 1 detected │ Collapsed to 1-line │ 1 collapsed │
+╰───────────────────────┴────────────┴─────────────────────┴─────────────╯
+📌 Active Pinned Directives: Language: Python 3.12 • Database: SQLite • No ORMs
+```
+
+### 2. Transcript & Simulation Inspector
+```bash
+# Run the built-in multi-turn simulation demo:
 python -m antiecho.cli inspect
 
 # Or inspect your own chat transcript JSON:
 python -m antiecho.cli inspect my_chat.json
-```
-
-**Output:**
-```
-                     AntiEcho Context Optimization Results                     
-+---------------------------+----------------+---------------+----------------+
-| Metric                    | Before         | After         | Improvement    |
-|---------------------------+----------------+---------------+----------------|
-| Estimated Tokens          | 2,480          | 1,620         | -860 tokens    |
-|                           |                |               | (-34.7%)       |
-| Characters                | 9,920          | 6,480         | -3,440 chars   |
-| Boilerplate & Echoes      | Present        | Stripped      | 8 removed      |
-| Resolved Error Traces     | 45 lines       | Collapsed ref | 1 collapsed    |
-| Superseded Code Drafts    | Full files     | Pointers      | 2 superseded   |
-| Active Facts & Directives | Buried         | Pinned header | 3 preserved    |
-+---------------------------+----------------+---------------+----------------+
 ```
 
 ---
